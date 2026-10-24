@@ -1,0 +1,57 @@
+#!/bin/sh
+# rpcd plugin for the LuCI page (Services > Signal Monitor):
+#   ubus call signalmon status                 enabled / running / started / off_at / url
+#   ubus call signalmon start | stop           turn it on (enabled=1 + start) or off (enabled=0 + stop)
+#   ubus call signalmon extend '{"minutes":60}'   push the auto-off time to now + minutes (default auto_off)
+RUN=/var/run/signalmon
+
+status() {
+	enabled=$(uci -q get signalmon.main.enabled); listen=$(uci -q get signalmon.main.listen)
+	[ -n "$listen" ] || { listen=$(uci -q get network.lan.ipaddr); listen=${listen%%/*}; listen=${listen%% *}; }
+	port=$(uci -q get signalmon.main.port); auto_off=$(uci -q get signalmon.main.auto_off)
+	running=false
+	ubus call service list '{"name":"signalmon"}' 2>/dev/null | jsonfilter -e '@.signalmon.instances.*.running' 2>/dev/null |
+		grep -q true && running=true
+	started=$(cat $RUN/started 2>/dev/null); off_at=$(cat $RUN/off_at 2>/dev/null)
+	printf '{"enabled":%s,"running":%s,"started":%s,"off_at":%s,"now":%s,"auto_off":%s,"url":"http://%s:%s/"}\n' \
+		"$([ "$enabled" = 1 ] && echo true || echo false)" "$running" "${started:-null}" "${off_at:-null}" \
+		"$(date +%s)" "${auto_off:-0}" "${listen:-192.168.1.1}" "${port:-8765}"
+}
+
+case "$1" in
+list)
+	echo '{"status":{},"start":{},"stop":{},"extend":{"minutes":32}}'
+	;;
+call)
+	read -r input
+	case "$2" in
+	status)
+		status
+		;;
+	start)
+		uci set signalmon.main.enabled=1 && uci commit signalmon
+		/etc/init.d/signalmon start >/dev/null 2>&1
+		for i in 1 2 3 4 5 6; do
+			ubus call service list '{"name":"signalmon"}' | jsonfilter -e '@.signalmon.instances.*.running' 2>/dev/null |
+				grep -q true && break
+			sleep 1
+		done
+		status
+		;;
+	stop)
+		uci set signalmon.main.enabled=0 && uci commit signalmon
+		/etc/init.d/signalmon stop >/dev/null 2>&1
+		status
+		;;
+	extend)
+		m=$(echo "$input" | jsonfilter -e '@.minutes' 2>/dev/null)
+		case "$m" in ''|*[!0-9]*|0) m=$(uci -q get signalmon.main.auto_off) ;; esac
+		case "$m" in ''|*[!0-9]*|0) rm -f $RUN/off_at ;; *) mkdir -p $RUN; echo $(( $(date +%s) + m * 60 )) > $RUN/off_at ;; esac
+		status
+		;;
+	*)
+		echo '{"error":"unknown method"}'
+		;;
+	esac
+	;;
+esac

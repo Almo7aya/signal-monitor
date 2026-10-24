@@ -1,0 +1,14 @@
+{
+	"admin/services/signalmon": {
+		"title": "Signal Monitor",
+		"order": 61,
+		"action": {
+			"type": "view",
+			"path": "signalmon/index"
+		},
+		"depends": {
+			"acl": [ "luci-app-signalmon" ],
+			"uci": { "signalmon": true }
+		}
+	}
+}

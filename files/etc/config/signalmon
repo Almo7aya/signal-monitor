@@ -1,0 +1,41 @@
+
+config signalmon 'main'
+	# on/off (LuCI: Services > Signal Monitor). Off by default; it only polls the routers while on.
+	option enabled '0'
+	# turn itself off after this many minutes (0 = stay on until turned off)
+	option auto_off '60'
+	# address and port of the monitor page (empty listen = the gateway's LAN address)
+	option listen ''
+	option port '8765'
+	# snapshots, speed-test history and spot/speed CSV (persistent)
+	option data_dir '/root/signalmon'
+	# per-poll CSV logs (tmpfs: written every poll, so kept off the SD card; lost on reboot)
+	option log_dir '/tmp/signalmon'
+	option speed_url 'https://speed.cloudflare.com/__down?bytes=50000000'
+	option speed_seconds '10'
+
+# "Old" router: ZTE ZX297520V3 based (e.g. Tozed ZLT S25), telnet without login.
+# Polling it faster than every 2 s with AT commands made it reboot; the server never goes below 2 s with at=1.
+config router 'old'
+	option name 'Old router'
+	option host '192.168.1.1'
+	option port '23'
+	option poll '2'
+	option at '1'
+	# the gateway's mwan3 interfaces that go through this router (one per PDN) and the one pinged during speed tests
+	list wans 'wan2'
+	list wans 'wan3'
+	list wans 'wan4'
+	option ping_wan 'wan3'
+
+# "New" router: SIMCom SIM7906E based (Tozed), telnet login
+config router 'new'
+	option name 'New router'
+	option host '192.168.0.1'
+	option port '4719'
+	option user 'superadmin'
+	option password 'CHANGE_ME'
+	option poll '1'
+	option neighbour_every '30'
+	list wans 'wan1'
+	option ping_wan 'wan1'

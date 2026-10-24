@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+# monitor output when run outside the gateway
+snapshots/
+*.csv
+speedtests.jsonl

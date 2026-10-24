@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Router Signal Monitor</title>
+<style>
+:root {
+  --bg: #f4f6f8; --card: #ffffff; --tile: #fafbfc; --ink: #1b1f24; --muted: #6a7380; --line: #e3e7ec; --grid: #e9edf1; --track: #edf0f3;
+  --ex: #1a9e5a; --good: #5cb85c; --fair: #d9a400; --poor: #e8730c; --bad: #d63a3a; --na: #9aa3ad;
+  --accent: #2f6fdf; --ref: #8a5cf6;
+  --new: #2f6fdf; --old: #e8730c; --both: #8a5cf6;
+  --w1: #2f6fdf; --w2: #e8730c; --w3: #e0a526; --w4: #c2410c; --up: #0e9f8e; --ping: #6a7380;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1215; --card: #171b20; --tile: #1b2026; --ink: #e8ebef; --muted: #98a2ae; --line: #2a3139; --grid: #232a31; --track: #232a31;
+    --ex: #2fc072; --good: #7ccf6e; --fair: #e6b822; --poor: #f08a33; --bad: #f05a5a; --na: #6b7580;
+    --accent: #6a9bff; --ref: #b195ff;
+    --new: #6a9bff; --old: #f59a4c; --both: #b195ff;
+    --w1: #6a9bff; --w2: #f59a4c; --w3: #f2c94c; --w4: #e0662a; --up: #3fd0b8; --ping: #a5afbb;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1215; --card: #171b20; --tile: #1b2026; --ink: #e8ebef; --muted: #98a2ae; --line: #2a3139; --grid: #232a31; --track: #232a31;
+  --ex: #2fc072; --good: #7ccf6e; --fair: #e6b822; --poor: #f08a33; --bad: #f05a5a; --na: #6b7580;
+  --accent: #6a9bff; --ref: #b195ff;
+  --new: #6a9bff; --old: #f59a4c; --both: #b195ff;
+  --w1: #6a9bff; --w2: #f59a4c; --w3: #f2c94c; --w4: #e0662a; --up: #3fd0b8; --ping: #a5afbb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+h1 { font-size: 19px; margin: 0; }
+h2 { font-size: 15px; margin: 0; }
+.routers { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.rhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--na); flex: none; }
+.dot.on { background: var(--ex); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ex) 22%, transparent); }
+.dot.off { background: var(--bad); }
+.sub { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
+[data-q="ex"] { --c: var(--ex); } [data-q="good"] { --c: var(--good); } [data-q="fair"] { --c: var(--fair); }
+[data-q="poor"] { --c: var(--poor); } [data-q="bad"] { --c: var(--bad); } [data-q="na"] { --c: var(--na); }
+.metrics { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.m { border-left: 4px solid var(--c, var(--na)); padding: 4px 0 4px 10px; }
+.label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.value.big { font-size: 44px; }
+.value small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 2px; }
+.q { color: var(--c, var(--na)); font-weight: 600; font-size: 12px; }
+.d { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 16px; }
+.d.up { color: var(--ex); } .d.down { color: var(--bad); } .d.same { color: var(--muted); }
+.mini { color: var(--muted); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.mini b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+.chains { margin-top: 10px; display: grid; gap: 6px; }
+.chain { display: grid; grid-template-columns: 92px 1fr 190px; gap: 8px; align-items: center; font-size: 13px; }
+.bar { height: 14px; background: var(--track); border-radius: 7px; overflow: hidden; position: relative; }
+.bar > i { display: block; height: 100%; background: var(--c, var(--na)); border-radius: 7px; transition: width .3s; }
+.bar > u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ref); }
+.cv { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; white-space: nowrap; }
+.cv b { color: var(--ink); }
+.cv .d { display: inline; }
+canvas.chart { width: 100%; height: 130px; display: block; touch-action: pan-y; }
+canvas.chart.sig { height: 130px; }
+canvas.chart.speed { height: 230px; }
+canvas.chart.bwbig { height: 190px; }
+canvas.chart.bwsmall { height: 140px; }
+canvas.hist { width: 100%; height: 170px; display: block; cursor: pointer; }
+.ct { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 12px; margin: 14px 0 4px; gap: 8px; }
+.ct b { color: var(--ink); font-weight: 600; }
+.warn { color: var(--poor); font-size: 12px; font-weight: 600; margin-top: 6px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+input[type=text], select { padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font: inherit; }
+input[type=text] { flex: 1 1 200px; min-width: 0; }
+input[type=range] { accent-color: var(--accent); width: 90px; }
+button { padding: 9px 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  font: inherit; font-weight: 600; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.refb { border-color: var(--ref); color: var(--ref); }
+button.small, a.btnlink { padding: 5px 9px; font-size: 12px; }
+a.btnlink { border: 1px solid var(--line); border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+button.sp { border-width: 2px; }
+button.sp[data-speed="old"] { border-color: var(--old); } button.sp[data-speed="new"] { border-color: var(--new); }
+button.sp[data-speed="both"] { border-color: var(--both); }
+button.tone { display: inline-flex; gap: 6px; align-items: center; }
+button.tone[aria-pressed="true"][data-tone="old"] { background: var(--old); border-color: var(--old); color: #fff; }
+button.tone[aria-pressed="true"][data-tone="new"] { background: var(--new); border-color: var(--new); color: #fff; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+section { margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 11px; }
+tbody.click tr { cursor: pointer; } tbody.click tr:hover td { background: var(--track); }
+tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tablewrap { overflow-x: auto; }
+.nb { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.refbanner { color: var(--ref); font-size: 12px; font-weight: 600; }
+.soundbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.snaps { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 8px; }
+.snap { border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: grid; gap: 6px; }
+.snap.active { border-color: var(--ref); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ref) 30%, transparent); }
+.snap img { width: 100%; border-radius: 6px; display: block; background: var(--track); aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+.snap .t { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snap .v { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.snap .b { display: flex; gap: 6px; flex-wrap: wrap; }
+/* bandwidth card */
+.bwtop { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-top: 12px; }
+.bwthree { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.bwtile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 8px; background: var(--tile); }
+.bwhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+.bwname { display: flex; align-items: center; gap: 7px; font-weight: 650; font-size: 15px; }
+.bwsub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.bwsub .bad { color: var(--bad); font-weight: 600; }
+.bwnow { text-align: right; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.bwnow .dn { font-size: 24px; font-weight: 700; }
+.bwnow .dn small, .bwnow .upl small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.bwnow .upl { font-size: 14px; font-weight: 600; color: var(--up); }
+.bwtile.big .bwnow .dn { font-size: 30px; }
+.bwfoot { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; gap: 14px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.bwfoot b { color: var(--ink); font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+/* speed card */
+.speedgrid { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(220px, 1fr); gap: 14px; margin-top: 10px; }
+@media (max-width: 760px) { .speedgrid { grid-template-columns: 1fr; } }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--tile); }
+.tile.wide { grid-column: span 2; }
+.tile .value { font-size: 22px; }
+.tile .value.big { font-size: 34px; }
+.tile.bgwarn { border-color: var(--poor); background: color-mix(in srgb, var(--poor) 10%, var(--card)); }
+.tile.bgwarn .label, .tile.bgwarn #t-bg { color: var(--poor); }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
+.pill.old { background: var(--old); } .pill.new { background: var(--new); } .pill.both { background: var(--both); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 9px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+.toast.show { opacity: .95; }
+@media (max-width: 420px) { .chain { grid-template-columns: 70px 1fr 150px; } .value.big { font-size: 38px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Router signal monitor</h1>
+    <span class="refbanner" id="refbanner"></span>
+    <span class="note" id="autooff" style="margin:0" title="Set in LuCI: Services → Signal Monitor"></span>
+  </header>
+
+  <div class="card soundbar">
+    <span class="label">Sound</span>
+    <button class="tone" data-tone="old" aria-pressed="false" title="Old router: soft low sine tone">🔈 Old · low · soft</button>
+    <input type="range" id="vol-old" min="0" max="1" step="0.05" value="0.5" title="Old router volume" aria-label="Old router volume">
+    <button class="tone" data-tone="new" aria-pressed="false" title="New router: bright high square-wave tone">🔈 New · high · bright</button>
+    <input type="range" id="vol-new" min="0" max="1" step="0.05" value="0.8" title="New router volume" aria-label="New router volume">
+    <select id="tonemode" title="Beep on every reading, or a continuous tone that glides with the signal">
+      <option value="beep">Beeps</option><option value="cont">Continuous</option></select>
+    <select id="tonefollow" title="SINR = quality (old router updates it every ~3 s). RSRP = strength (live on both).">
+      <option value="sinr">Pitch follows SINR</option><option value="rsrp">Pitch follows RSRP</option></select>
+    <label class="note" style="margin:0;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="stereo"> Stereo L/R</label>
+    <span class="note" style="margin:0">Higher pitch = better signal</span>
+  </div>
+
+  <div class="routers" id="routers"></div>
+
+  <section class="card">
+    <div class="rhead"><h2>Live bandwidth</h2>
+      <span class="note" style="margin:0">Every WAN as the Pi sees it · 1 s samples · <span class="sw" style="background:var(--w2)"></span>download filled ·
+        <span class="sw" style="background:var(--up)"></span>upload line · hover a chart for exact values</span></div>
+    <div class="bwtop" id="bwtop"></div>
+    <div class="bwthree" id="bwthree"></div>
+  </section>
+
+  <section class="card">
+    <h2>Test a position / antenna setup</h2>
+    <div class="controls">
+      <input type="text" id="label" placeholder="Name it, e.g. before / old: 2 antennas" maxlength="40">
+      <button class="primary" id="spotbtn">Measure both (15 s)</button>
+      <button class="refb" id="snapbtn">📸 Snapshot</button>
+    </div>
+    <div class="note" id="measuring">Change one thing, wait ~6 s, then measure. Keep everything still while measuring.</div>
+    <div class="note">Snapshot saves both routers' graphs and values (PNG + data, 10 s averages) on the gateway (<span id="datadir">data dir</span>/snapshots) and lists it below as a reference.
+      The name above is also used to label speed tests.</div>
+  </section>
+
+  <section class="card" id="speedcard">
+    <div class="rhead"><h2>Speed tests</h2><span class="note" id="speeddata" style="margin:0"></span></div>
+    <div class="controls">
+      <button class="sp" data-speed="old">▶ Old router <span class="note" style="margin:0"></span></button>
+      <button class="sp" data-speed="new">▶ New router <span class="note" style="margin:0"></span></button>
+      <button class="sp" data-speed="both">▶ Both at once <span class="note" style="margin:0"></span></button>
+      <span class="note" style="margin:0">10 s download via the Pi · ~5–25 MB of mobile data each · one test at a time</span>
+    </div>
+    <div class="speedgrid">
+      <div>
+        <div class="ct"><span id="speedtitle">No test yet</span><span>Mbit/s stacked per WAN · ping ms on the right</span></div>
+        <canvas class="chart speed" id="speedlive"></canvas>
+        <div class="legend" id="speedlegend"></div>
+      </div>
+      <div class="tiles">
+        <div class="tile wide"><div class="label">Average download</div><div class="value big"><span id="t-avg">—</span><small>Mbit/s</small></div>
+          <div class="d" id="t-avgd"></div></div>
+        <div class="tile"><div class="label">Peak (1 s)</div><div class="value"><span id="t-peak">—</span><small>Mbit/s</small></div></div>
+        <div class="tile"><div class="label">Data used</div><div class="value"><span id="t-mb">—</span><small>MB</small></div></div>
+        <div class="tile wide"><div class="label">Ping idle → under load</div><div class="value"><span id="t-ping">—</span><small>ms</small></div>
+          <div class="note" id="t-pingx" style="margin:0"></div></div>
+        <div class="tile wide bgwarn" id="t-bgtile" hidden><div class="label">⚠ Other traffic already on these WANs</div>
+          <div id="t-bg" style="font-size:13px;font-weight:600"></div>
+          <div class="note" style="margin:0">Someone else was downloading when the test started, so this result is lower than the link can do. Re-test when it's quiet.</div></div>
+      </div>
+    </div>
+    <div class="ct"><span>History: average per test (click a bar or row to inspect it)</span><span id="histlegend"></span></div>
+    <canvas class="hist" id="speedhist"></canvas>
+    <div class="tablewrap" style="margin-top:6px"><table>
+      <thead><tr><th>Time</th><th>Label</th><th>Router</th><th>Avg</th><th>Peak</th><th>Per WAN (Mbit/s)</th><th>Ping idle → load</th><th>Loss</th><th>MB</th><th>Busy before?</th></tr></thead>
+      <tbody id="speedrows" class="click"><tr><td colspan="10" class="note">No speed tests yet.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <div class="rhead"><h2>Reference snapshots</h2><span class="note" id="refnote">Pick one with “Use as reference” to see live differences against it.</span></div>
+    <div class="snaps" id="snaps"><div class="note">No snapshots yet.</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Measured spots</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Spot</th><th>Old SINR</th><th>Old RSRP</th><th>Old ports</th><th>Old speed</th>
+        <th>New SINR</th><th>New RSRP</th><th>New antennas</th><th>New speed</th><th>Time</th></tr></thead>
+      <tbody id="spots"><tr><td colspan="10" class="note">No spots yet.</td></tr></tbody>
+    </table></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 1) => v == null || isNaN(v) ? '—' : (+v).toFixed(d);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* ignore */ } } };
+const SINR_BANDS = [[-10, 0, 'bad'], [0, 5, 'poor'], [5, 13, 'fair'], [13, 20, 'good'], [20, 25, 'ex']];
+const RSRP_BANDS = [[-125, -110, 'bad'], [-110, -100, 'poor'], [-100, -90, 'fair'], [-90, -80, 'good'], [-80, -70, 'ex']];
+// [title, unit, history index, y min, y max, quality bands, metric key]
+const CHARTS = [['SINR', 'dB', 1, -10, 25, SINR_BANDS, 'sinr'], ['RSRP', 'dBm', 2, -125, -70, RSRP_BANDS, 'rsrp']];
+const ROUTER_NAME = { old: 'Old router', new: 'New router', both: 'Both' };  // names come from /data (UCI)
+let ac = null, lastT = {}, spotsKey = '', snapsKey = '', built = false, last = null;
+let refId = store.get('refSnap');
+let speeds = [], speedRev = -1, selSpeed = null, histRects = [], speedKey = '';
+const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+
+function q(v, kind) {
+  if (v == null) return ['—', 'na'];
+  if (kind === 'sinr') return v >= 20 ? ['Excellent', 'ex'] : v >= 13 ? ['Good', 'good'] : v >= 5 ? ['Fair', 'fair'] : v >= 0 ? ['Poor', 'poor'] : ['Bad', 'bad'];
+  if (kind === 'rsrp') return v >= -80 ? ['Excellent', 'ex'] : v >= -90 ? ['Good', 'good'] : v >= -100 ? ['Fair', 'fair'] : v >= -110 ? ['Poor', 'poor'] : ['Bad', 'bad'];
+  return v >= -10 ? ['Good', 'good'] : v >= -15 ? ['Fair', 'fair'] : v >= -20 ? ['Poor', 'poor'] : ['Bad', 'bad'];
+}
+// all signal metrics and throughput are "higher is better"
+function delta(v, r, d = 1) {
+  if (v == null || r == null) return ['', ''];
+  const x = v - r;
+  if (Math.abs(x) < (d === 0 ? 0.5 : 0.05)) return ['±0', 'same'];
+  return [(x > 0 ? '+' : '') + x.toFixed(d), Math.abs(x) < 0.5 ? 'same' : x > 0 ? 'up' : 'down'];
+}
+const refSnap = s => (s.snapshots || []).find(x => x.id === refId) || null;
+
+/* ================= chart component ================= */
+function niceNum(x) {
+  const e = Math.floor(Math.log10(Math.max(x, 1e-9))), f = x / Math.pow(10, e);
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * Math.pow(10, e);
+}
+const niceMax = v => niceNum(Math.max(v, 1e-6));
+function niceTicks(lo, hi, n) {
+  const step = niceNum((hi - lo) / n), out = [];
+  for (let t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9; t += step) out.push(+t.toFixed(6));
+  return out;
+}
+const fmtTick = v => Math.abs(v) >= 100 || Number.isInteger(v) ? String(Math.round(v)) : v.toFixed(Math.abs(v) < 1 ? 2 : 1);
+function rgba(hex, a) {
+  hex = (hex || '#888888').replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const n = parseInt(hex, 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+function prep(c) {
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  return { g, w, h };
+}
+// split into runs of non-null points so gaps stay gaps
+function runs(P) {
+  const out = []; let cur = [];
+  for (const p of P) { if (p[1] == null || isNaN(p[1])) { if (cur.length) out.push(cur); cur = []; } else cur.push(p); }
+  if (cur.length) out.push(cur);
+  return out;
+}
+// smooth path through screen points (quadratic curves through midpoints)
+function pathThrough(g, P, move) {
+  if (!P.length) return;
+  if (move) g.moveTo(P[0][0], P[0][1]); else g.lineTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length - 1; i++)
+    g.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
+  if (P.length > 1) g.lineTo(P[P.length - 1][0], P[P.length - 1][1]);
+}
+function nearest(pts, x) {
+  let best = null, bd = Infinity;
+  for (const p of pts) { const d = Math.abs(p[0] - x); if (d < bd && p[1] != null) { bd = d; best = p; } }
+  return best;
+}
+function rrect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); }
+/*
+  plot(g, X, Y, W, H, cfg) draws a full chart (axes, grid, series, hover) into a rectangle.
+  cfg: time (bool) + now + span | xMax · y {min, max|null, minMax, ticks, unit, dec} · bands ·
+       stack [{name, color, pts}] · lines [{name, color, pts, fill, width, dash, unit, dec}] ·
+       right {max, unit, lines [...]} · ticks [x...] (red no-reply marks) · ref {v, label} · markers [{x, label}] · hoverX
+*/
+function plot(g, X, Y, W, H, cfg) {
+  const hasR = !!cfg.right, L = 44, R = hasR ? 46 : 14, T = cfg.y.unit || hasR ? 22 : 12, B = 22;
+  const pw = Math.max(10, W - L - R), ph = Math.max(10, H - T - B);
+  g.save(); g.translate(X, Y);
+  g.fillStyle = cfg.bg || css('--card'); g.fillRect(0, 0, W, H);
+  const x0 = cfg.time ? cfg.now - cfg.span : 0, x1 = cfg.time ? cfg.now : cfg.xMax;
+  const sx = v => L + (v - x0) / (x1 - x0) * pw;
+  const y0 = cfg.y.min ?? 0;
+  const y1 = cfg.y.max ?? niceMax(Math.max(cfg.y.minMax || 1, cfg.peak || 0) * 1.12);
+  const sy = v => T + ph - (Math.max(y0, Math.min(y1, v)) - y0) / (y1 - y0) * ph;
+  const r1 = hasR ? cfg.right.max : 1, syr = v => T + ph - Math.min(v, r1) / r1 * ph;
+  g.font = '11px system-ui'; g.lineWidth = 1;
+  if (cfg.bands) for (const [a, b, k] of cfg.bands) { g.fillStyle = rgba(css('--' + k), 0.08); g.fillRect(L, sy(b), pw, sy(a) - sy(b)); }
+  // y grid + labels
+  g.textBaseline = 'middle';
+  for (const t of niceTicks(y0, y1, cfg.y.ticks || 4)) {
+    const yy = Math.round(sy(t)) + 0.5;
+    g.strokeStyle = css(t === y0 ? '--line' : '--grid'); g.setLineDash(t === y0 ? [] : [3, 4]);
+    g.beginPath(); g.moveTo(L, yy); g.lineTo(L + pw, yy); g.stroke();
+    g.fillStyle = css('--muted'); g.textAlign = 'right'; g.fillText(fmtTick(t), L - 7, yy);
+  }
+  g.setLineDash([]);
+  if (hasR) for (const t of niceTicks(0, r1, 4)) { g.fillStyle = css('--muted'); g.textAlign = 'left'; g.fillText(fmtTick(t), L + pw + 7, syr(t)); }
+  // unit captions
+  g.textBaseline = 'alphabetic'; g.fillStyle = css('--muted'); g.font = '10px system-ui';
+  if (cfg.y.unit) { g.textAlign = 'right'; g.fillText(cfg.y.unit, L - 7, T - 11); }
+  if (hasR && cfg.right.unit) { g.textAlign = 'left'; g.fillText(cfg.right.unit, L + pw + 7, T - 11); }
+  // x labels
+  g.font = '11px system-ui'; g.textAlign = 'center'; g.textBaseline = 'top';
+  if (cfg.time) {
+    const step = cfg.span <= 90 ? 15 : cfg.span <= 180 ? 30 : 60;
+    for (let s = 0; s <= cfg.span + 1e-6; s += step) {
+      const xx = sx(x1 - s); if (xx < L + 8 && s) continue;
+      g.fillText(s === 0 ? 'now' : s % 60 === 0 ? `−${s / 60}m` : `−${s}s`, Math.min(xx, L + pw - 12), T + ph + 6);
+    }
+  } else {
+    const step = cfg.xMax <= 12 ? 2 : 5;
+    for (let s = 0; s <= cfg.xMax + 1e-6; s += step) g.fillText(s + 's', sx(s), T + ph + 6);
+  }
+  g.textBaseline = 'alphabetic';
+  // plot area
+  g.save(); g.beginPath(); g.rect(L, T - 3, pw, ph + 6); g.clip();
+  for (const m of cfg.markers || []) {
+    if (m.x < x0 || m.x > x1) continue;
+    g.setLineDash([3, 3]); g.strokeStyle = css('--muted'); g.beginPath(); g.moveTo(sx(m.x), T); g.lineTo(sx(m.x), T + ph); g.stroke();
+    g.setLineDash([]); g.fillStyle = css('--muted'); g.font = '10px system-ui'; g.textAlign = 'left'; g.fillText(m.label, sx(m.x) + 3, T + 10);
+  }
+  if (cfg.ref && cfg.ref.v != null) {
+    g.setLineDash([6, 4]); g.strokeStyle = css('--ref'); g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(L, sy(cfg.ref.v)); g.lineTo(L + pw, sy(cfg.ref.v)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = css('--ref'); g.font = '600 10px system-ui'; g.textAlign = 'right';
+    g.fillText(`ref ${fmt(cfg.ref.v)}`, L + pw - 4, Math.max(T + 9, sy(cfg.ref.v) - 4));
+  }
+  const vis = pts => pts.filter(p => p[0] >= x0 - 2 && p[0] <= x1 + 2);
+  // stacked areas (all series share the same x samples)
+  if (cfg.stack && cfg.stack.length) {
+    const S = cfg.stack.map(s => vis(s.pts)), n = Math.min(...S.map(p => p.length));
+    let lower = new Array(n).fill(0);
+    S.forEach((pts, k) => {
+      if (!n) return;
+      const p = pts.slice(pts.length - n), col = cfg.stack[k].color;
+      const upper = p.map((q, i) => lower[i] + (q[1] || 0));
+      const top = p.map((q, i) => [sx(q[0]), sy(upper[i])]), bot = p.map((q, i) => [sx(q[0]), sy(lower[i])]).reverse();
+      const gr = g.createLinearGradient(0, T, 0, T + ph); gr.addColorStop(0, rgba(col, 0.62)); gr.addColorStop(1, rgba(col, 0.16));
+      g.beginPath(); pathThrough(g, top, true); pathThrough(g, bot, false); g.closePath(); g.fillStyle = gr; g.fill();
+      g.beginPath(); pathThrough(g, top, true); g.strokeStyle = col; g.lineWidth = 1.75; g.lineJoin = 'round'; g.stroke();
+      lower = upper;
+    });
+  }
+  const drawLine = (ln, scale) => {
+    const segs = ln.connect ? [vis(ln.pts).filter(p => p[1] != null)] : runs(vis(ln.pts));
+    for (const run of segs) {
+      const P = run.map(p => [sx(p[0]), scale(p[1])]);
+      if (ln.fill && P.length > 1) {
+        const fa = ln.fillAlpha ?? 0.32;
+        const gr = g.createLinearGradient(0, T, 0, T + ph); gr.addColorStop(0, rgba(ln.color, fa)); gr.addColorStop(1, rgba(ln.color, 0));
+        g.beginPath(); pathThrough(g, P, true); g.lineTo(P[P.length - 1][0], T + ph); g.lineTo(P[0][0], T + ph); g.closePath(); g.fillStyle = gr; g.fill();
+      }
+      g.beginPath(); pathThrough(g, P, true); g.strokeStyle = ln.color; g.lineWidth = ln.width || 2; g.lineJoin = 'round'; g.lineCap = 'round';
+      g.setLineDash(ln.dash || []); g.stroke(); g.setLineDash([]);
+      if (P.length === 1) { g.fillStyle = ln.color; g.beginPath(); g.arc(P[0][0], P[0][1], 2.5, 0, 7); g.fill(); }
+    }
+  };
+  for (const ln of cfg.lines || []) drawLine(ln, sy);
+  if (hasR) for (const ln of cfg.right.lines || []) drawLine(ln, syr);
+  g.fillStyle = css('--bad');
+  for (const t of cfg.ticks || []) if (t >= x0 && t <= x1) g.fillRect(sx(t) - 1, T - 2, 2, 7);
+  g.restore();
+  if (cfg.empty) { g.fillStyle = css('--muted'); g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText(cfg.empty, L + pw / 2, T + ph / 2); }
+  // hover crosshair + tooltip
+  if (cfg.hoverX != null && cfg.hoverX >= L && cfg.hoverX <= L + pw) {
+    const xv = x0 + (cfg.hoverX - L) / pw * (x1 - x0), rows = [];
+    let gx = null;
+    const add = (name, color, pts, scale, unit, dec) => {
+      const p = nearest(vis(pts), xv); if (!p) return;
+      if (gx == null) gx = p[0];
+      rows.push([name, color, p[1], unit, dec, scale(p[1])]);
+    };
+    if (cfg.stack) {
+      let acc = 0;
+      cfg.stack.forEach(s => { const p = nearest(vis(s.pts), xv); if (p) { acc += p[1] || 0; if (gx == null) gx = p[0];
+        rows.push([s.name, s.color, p[1], cfg.y.unit, cfg.y.dec ?? 2, sy(acc)]); } });
+      if (cfg.stack.length > 1 && rows.length) rows.push(['total', css('--ink'), acc, cfg.y.unit, cfg.y.dec ?? 2, null]);
+    }
+    for (const ln of cfg.lines || []) add(ln.name, ln.color, ln.pts, sy, ln.unit ?? cfg.y.unit, ln.dec ?? cfg.y.dec ?? 1);
+    if (hasR) for (const ln of cfg.right.lines || []) add(ln.name, ln.color, ln.pts, syr, cfg.right.unit, 0);
+    if (rows.length && gx != null) {
+      const X0 = sx(gx);
+      g.strokeStyle = rgba(css('--ink'), 0.35); g.lineWidth = 1; g.beginPath(); g.moveTo(X0, T); g.lineTo(X0, T + ph); g.stroke();
+      for (const r of rows) if (r[5] != null) { g.fillStyle = css('--card'); g.beginPath(); g.arc(X0, r[5], 4, 0, 7); g.fill();
+        g.strokeStyle = r[1]; g.lineWidth = 2; g.stroke(); }
+      const head = cfg.time ? new Date(gx * 1000).toLocaleTimeString([], { hour12: false }) : `${fmt(gx, 1)} s`;
+      g.font = '12px system-ui';
+      const lines = rows.map(r => `${r[0]}: ${fmt(r[2], r[4])} ${r[3] || ''}`.trim());
+      const bw = Math.max(g.measureText(head).width, ...lines.map(t => g.measureText(t).width)) + 30, bh = 20 + rows.length * 17;
+      let bx = X0 + 12; if (bx + bw > L + pw) bx = X0 - 12 - bw;
+      const by = Math.max(T, Math.min(T + ph - bh, (cfg.hoverY ?? T + 10) - bh / 2));
+      g.fillStyle = rgba(css('--ink'), 0.92); rrect(g, bx, by, bw, bh, 7); g.fill();
+      g.fillStyle = css('--card'); g.textAlign = 'left'; g.font = '600 12px system-ui'; g.fillText(head, bx + 10, by + 15);
+      g.font = '12px system-ui';
+      rows.forEach((r, i) => { g.fillStyle = r[1]; g.fillRect(bx + 10, by + 22 + i * 17, 9, 9); g.fillStyle = css('--card'); g.fillText(lines[i], bx + 24, by + 31 + i * 17); });
+    }
+  }
+  g.restore();
+}
+const HOVER = new Map();
+function chart(c, cfg) {
+  if (!c || !c.clientWidth) return;
+  c._cfg = cfg;
+  const { g, w, h } = prep(c), hv = HOVER.get(c);
+  plot(g, 0, 0, w, h, Object.assign({}, cfg, hv ? { hoverX: hv[0], hoverY: hv[1] } : {}));
+}
+document.addEventListener('pointermove', e => {
+  const c = e.target;
+  if (c.tagName === 'CANVAS' && c.classList.contains('chart')) { HOVER.set(c, [e.offsetX, e.offsetY]); if (c._cfg) chart(c, c._cfg); }
+});
+document.addEventListener('pointerout', e => {
+  const c = e.target;
+  if (c.tagName === 'CANVAS' && HOVER.has(c)) { HOVER.delete(c); if (c._cfg) chart(c, c._cfg); }
+});
+// time window grows with the data: at least 1 min, at most 5 min, in 30 s steps
+function spanFor(firstT, now) { return Math.min(300, Math.max(60, Math.ceil((now - firstT) / 30) * 30)); }
+
+/* ================= router panels ================= */
+function panel(r) {
+  const metric = (k, lbl, unit, big) => `<div class="m" id="${r.id}-${k}m"><div class="label">${lbl}</div>
+    <div class="value${big ? ' big' : ''}"><span id="${r.id}-${k}">—</span><small>${unit}</small></div>
+    <div class="q" id="${r.id}-${k}q">—</div><div class="d" id="${r.id}-${k}d"></div></div>`;
+  return `<div class="card" id="p-${r.id}">
+    <div class="rhead"><h2>${r.name}</h2><div class="status"><span class="dot" id="${r.id}-dot"></span><span id="${r.id}-st">…</span></div></div>
+    <div class="sub" id="${r.id}-cell">waiting…</div>
+    <div class="metrics">${metric('sinr', 'SINR', 'dB', true)}${metric('rsrp', 'RSRP', 'dBm')}${metric('rsrq', 'RSRQ', 'dB')}</div>
+    <div class="mini"><span>10 s avg SINR <b id="${r.id}-avg">—</b></span><span>best <b id="${r.id}-best">—</b></span><span id="${r.id}-extra"></span></div>
+    <div class="chains" id="${r.id}-chains"></div>
+    <div class="warn" id="${r.id}-warn" hidden>Switched cell (PCI changed). Only compare readings on the same PCI.</div>
+    ${CHARTS.map(([t, u], i) => `<div class="ct"><span><b>${t}</b> · ${u}</span><span id="${r.id}-c${i + 1}t"></span></div>
+      <canvas class="chart sig" id="${r.id}-c${i + 1}"></canvas>`).join('')}
+    <div class="nb" id="${r.id}-nb"></div>
+  </div>`;
+}
+
+function setM(id, v, kind, d, refv) {
+  $(id).textContent = fmt(v, d);
+  const [lab, cls] = q(v, kind);
+  $(id + 'q').textContent = lab;
+  $(id + 'm').dataset.q = cls;
+  const [dt, dc] = delta(v, refv);
+  $(id + 'd').textContent = dt ? `${dt} vs ref` : '';
+  $(id + 'd').className = 'd ' + dc;
+}
+
+function signalCfg(r, i, s, R, now) {
+  const [title, unit, idx, lo, hi, bands, key] = CHARTS[i], hist = r.history || [];
+  const span = spanFor(hist.length ? hist[0][0] : now, now);
+  return { time: true, now, span, y: { min: lo, max: hi, ticks: 5, unit, dec: 1 }, bands,
+    lines: [{ name: title, color: css('--' + r.id), pts: hist.map(p => [p[0], p[idx]]), fill: true, fillAlpha: 0.16, width: 2.25, unit, dec: 1 }],
+    ref: R ? { v: R[key] } : null, markers: (s.spots || []).map(x => ({ x: x.t, label: x.label })),
+    empty: hist.length ? null : 'waiting for data…' };
+}
+
+const chainText = (ch, refRsrp) => {
+  const [dt, dc] = delta(ch.rsrp, refRsrp, 0);
+  const tail = ch.sinr != null ? ` · SINR <b>${fmt(ch.sinr, 0)}</b>` : (ch.rssi != null ? ` · RSSI <b>${fmt(ch.rssi, 1)}</b>` : '');
+  return `<b>${fmt(ch.rsrp, 0)}</b> dBm${dt ? ` <span class="d ${dc}">${dt}</span>` : ''}${tail}`;
+};
+const pct = v => v == null ? 0 : Math.max(2, Math.min(100, (v + 125) / 55 * 100));
+
+function renderRouter(r, s, ref, now) {
+  const L = r.latest, age = L ? now - L.t : 1e9, id = r.id, R = ref ? ref[id] : null;
+  $(id + '-dot').className = 'dot' + (age < 10 ? ' on' : '');
+  $(id + '-st').textContent = age < 10 ? 'live' : (r.status || 'waiting…');
+  if (L) {
+    setM(id + '-sinr', L.sinr, 'sinr', 1, R && R.sinr);
+    setM(id + '-rsrp', L.rsrp, 'rsrp', id === 'new' ? 1 : 0, R && R.rsrp);
+    setM(id + '-rsrq', L.rsrq, 'rsrq', 1, R && R.rsrq);
+    $(id + '-cell').textContent = `Band ${L.band ?? '?'} · ${L.bw ?? ''} · PCI ${L.pci ?? '?'} · cell ${L.cell ?? '?'}` +
+      (id === 'old' ? ` · polled every ${s.poll ? s.poll.old : '?'} s${s.poll && s.poll.old_at ? ' (RSRP live, SINR from firmware ~3 s)' : ' (firmware values ~3 s)'}`
+        : ` · polled every ${s.poll ? s.poll.new : '?'} s, averaged over 4 antennas`);
+    let extra = '';
+    if (id === 'new') extra = `MIMO <b>${L.mimo ?? '—'}</b> · DL rank <b>${L.dl_rank ?? '—'}</b> · CQI <b>${L.cqi ?? '—'}</b> · MCS <b>${L.dl_mcs ?? '—'}</b>` +
+      (L.ca ? ` · <b style="color:var(--ex)">CA active</b>` : ' · no CA');
+    if (id === 'old' && L.sinr_age != null) extra = `SINR age <b>${fmt(L.sinr_age, 0)} s</b>`;
+    $(id + '-extra').innerHTML = extra;
+    $(id + '-chains').innerHTML = (L.chains || []).map((ch, i) => {
+      const rr = R && R.chains ? R.chains[i] : null;
+      return `<div class="chain" data-q="${q(ch.rsrp, 'rsrp')[1]}"><span>${ch.name}</span>` +
+        `<div class="bar"><i style="width:${pct(ch.rsrp)}%"></i>${rr != null ? `<u style="left:${pct(rr)}%"></u>` : ''}</div>` +
+        `<span class="cv">${chainText(ch, rr)}</span></div>`;
+    }).join('');
+    if (L.neighbours && L.neighbours.length) $(id + '-nb').textContent = 'Cells seen: ' +
+      L.neighbours.map(n => `PCI ${n.pci} B${n.band ?? '?'} ${fmt(n.rsrp, 0)}`).join(' · ');
+    if (lastT[id] !== L.t) { lastT[id] = L.t; onSample(id, L); }
+  }
+  $(id + '-avg').textContent = r.avg10 ? fmt(r.avg10.sinr) : '—';
+  $(id + '-best').textContent = fmt(r.best);
+  $(id + '-warn').hidden = !r.cell_changed;
+  CHARTS.forEach((c, i) => {
+    const cfg = signalCfg(r, i, s, R, now);
+    $(`${id}-c${i + 1}t`).textContent = `last ${cfg.span >= 60 && cfg.span % 60 === 0 ? cfg.span / 60 + ' min' : cfg.span + ' s'}`;
+    chart($(`${id}-c${i + 1}`), cfg);
+  });
+}
+
+/* ================= live bandwidth ================= */
+// cards: one per router (all its WANs stacked), then one per WAN of a router that has several (e.g. one per PDN)
+let BW_TILES = null, ALL_WANS = [];
+function bwTiles(s) {
+  const rs = Object.fromEntries((s.routers || []).map(r => [r.id, r])), tiles = [];
+  for (const id of ['new', 'old']) {
+    const r = rs[id];
+    if (r && r.wans && r.wans.length) tiles.push({ id, title: r.name, router: id, wans: r.wans, big: true });
+  }
+  for (const id of ['new', 'old']) {
+    const r = rs[id];
+    if (r && r.wans && r.wans.length > 1) r.wans.forEach(w => tiles.push({ id: 'w-' + w, title: w, router: id, wans: [w], parent: r.name }));
+  }
+  return tiles;
+}
+const bwSub = (t, gw) => t.parent ? t.parent + (gw[t.wans[0]] ? ' · ' + gw[t.wans[0]] : '')
+  : t.wans.length > 1 ? 'total of ' + t.wans.join(' + ') : t.wans[0] + (gw[t.wans[0]] ? ' · ' + gw[t.wans[0]] : '');
+const wanColor = w => css('--w' + ((Math.max(0, ALL_WANS.indexOf(w)) % 4) + 1));
+function bwTile(t) {
+  return `<div class="bwtile${t.big ? ' big' : ''}">
+    <div class="bwhead"><div><div class="bwname"><span class="dot" id="bwd-${t.id}"></span>${t.title}
+        <span class="pill ${t.router}">${t.router}</span></div><div class="bwsub" id="bws-${t.id}">${t.sub}</div></div>
+      <div class="bwnow"><div class="dn">↓ <span id="bwdn-${t.id}">—</span> <small>Mbit/s</small></div>
+        <div class="upl">↑ <span id="bwup-${t.id}">—</span> <small>Mbit/s</small></div></div></div>
+    <canvas class="chart ${t.big ? 'bwbig' : 'bwsmall'}" id="bwc-${t.id}"></canvas>
+    <div class="bwfoot" id="bwf-${t.id}"></div>
+  </div>`;
+}
+function renderBandwidth(s, now) {
+  if (!BW_TILES) BW_TILES = bwTiles(s);
+  if (!$('bwtop').childElementCount) {
+    $('bwtop').innerHTML = BW_TILES.filter(t => t.big).map(bwTile).join('');
+    $('bwthree').innerHTML = BW_TILES.filter(t => !t.big).map(bwTile).join('');
+  }
+  const bw = s.bw || {}, mw = s.bw_mwan || {}, ok = s.bw_state === 'live';
+  for (const t of BW_TILES) {
+    const series = t.wans.map(w => bw[w] || []), n = Math.min(...series.map(x => x.length));
+    const al = series.map(x => x.slice(x.length - n));          // aligned samples [t, down, up]
+    const span = spanFor(n ? al[0][0][0] : now, now);
+    const inWin = k => al[0][k][0] >= now - span;
+    const totals = [], ups = [];
+    for (let k = 0; k < n; k++) if (inWin(k)) { totals.push(sum(al.map(x => x[k][1]))); ups.push(sum(al.map(x => x[k][2]))); }
+    const lastK = n - 1, fresh = n && now - al[0][lastK][0] < 5;
+    $(`bwdn-${t.id}`).textContent = fresh ? fmt(sum(al.map(x => x[lastK][1])), 1) : '—';
+    $(`bwup-${t.id}`).textContent = fresh ? fmt(sum(al.map(x => x[lastK][2])), 1) : '—';
+    const states = t.wans.map(w => mw[w]).filter(Boolean), online = states.filter(x => x === 'online').length;
+    $(`bwd-${t.id}`).className = 'dot' + (!states.length ? '' : online === t.wans.length ? ' on' : ' off');
+    const bad = t.wans.filter(w => mw[w] && mw[w] !== 'online').map(w => `${w} ${mw[w]}`);
+    $(`bws-${t.id}`).innerHTML = esc(bwSub(t, s.wan_gw || {})) + (bad.length ? ` · <span class="bad">${esc(bad.join(', '))}</span>`
+      : states.length && t.wans.length > 1 ? ` · ${online}/${t.wans.length} online` : '') + (ok ? '' : ` · <span class="bad">${esc(s.bw_state || 'no data')}</span>`);
+    const peak = totals.length ? Math.max(...totals) : null, avg = totals.length ? sum(totals) / totals.length : null;
+    $(`bwf-${t.id}`).innerHTML = `<span>peak ↓ <b>${fmt(peak, 1)}</b></span><span>avg ↓ <b>${fmt(avg, 2)}</b></span>` +
+      `<span>peak ↑ <b>${fmt(ups.length ? Math.max(...ups) : null, 1)}</b></span><span>window ${span >= 60 && span % 60 === 0 ? span / 60 + ' min' : span + ' s'}</span>` +
+      (t.wans.length > 1 ? t.wans.map(w => `<span><span class="sw" style="background:${wanColor(w)}"></span>${w}</span>`).join('') : '');
+    chart($(`bwc-${t.id}`), {
+      time: true, now, span, peak: Math.max(peak || 0, ups.length ? Math.max(...ups) : 0),
+      y: { min: 0, max: null, minMax: 1, ticks: 4, unit: 'Mbit/s', dec: 2 },
+      stack: t.wans.map((w, i) => ({ name: `${w} ↓`, color: wanColor(w), pts: al[i].map(p => [p[0], p[1]]) })),
+      lines: [{ name: '↑ upload', color: css('--up'), width: 1.75, unit: 'Mbit/s', dec: 2,
+        pts: n ? al[0].map((p, k) => [p[0], sum(al.map(x => x[k][2]))]) : [] }],
+      empty: n ? null : 'waiting for data…',
+    });
+  }
+}
+
+/* ================= sound: one voice per router, both can play together ================= */
+// old = soft sine from C4; new = bright square wave from G5 (an octave and a half higher, so it never overlaps)
+const TONES = { old: { type: 'sine', base: 262, pan: -0.7, gain: 1.0, len: 0.14 },
+                new: { type: 'square', base: 784, pan: 0.7, gain: 0.45, len: 0.18 } };
+const audio = { on: { old: false, new: false }, mode: store.get('toneMode') || 'beep', follow: store.get('toneFollow') || 'sinr',
+  vol: { old: +(store.get('toneVolOld') ?? 0.5), new: +(store.get('toneVolNew') ?? 0.8) },
+  stereo: store.get('toneStereo') !== '0', cont: {} };
+function ensureAC() {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') ac.resume();
+}
+// 1 semitone per dB of SINR (or per 2 dB of RSRP), clamped to 2 octaves above the router's base note
+function toneFreq(rid, L) {
+  const v = audio.follow === 'rsrp' ? (L.rsrp == null ? null : (L.rsrp + 120) / 2) : (L.sinr == null ? null : L.sinr + 10);
+  return v == null ? null : TONES[rid].base * Math.pow(2, Math.max(0, Math.min(24, v)) / 12);
+}
+const level = (rid, k) => Math.max(0.0002, k * TONES[rid].gain * audio.vol[rid]);
+function voice(rid) {
+  const g = ac.createGain();
+  if (audio.stereo && ac.createStereoPanner) {
+    const p = ac.createStereoPanner(); p.pan.value = TONES[rid].pan; g.connect(p).connect(ac.destination);
+  } else g.connect(ac.destination);
+  return g;
+}
+function beep(rid, f) {
+  const g = voice(rid), o = ac.createOscillator(), t = ac.currentTime, len = TONES[rid].len;
+  o.type = TONES[rid].type; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(level(rid, 0.35), t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  o.connect(g); o.start(t); o.stop(t + len + 0.02);
+}
+function contStart(rid) {
+  if (audio.cont[rid]) return;
+  const g = voice(rid), o = ac.createOscillator();
+  o.type = TONES[rid].type; o.frequency.value = TONES[rid].base; g.gain.value = 0.0001;
+  o.connect(g); o.start(); audio.cont[rid] = { o, g };
+}
+function contStop(rid) {
+  const c = audio.cont[rid]; if (!c) return;
+  c.g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); c.o.stop(ac.currentTime + 0.3); delete audio.cont[rid];
+}
+function contSet(rid, f) {
+  const c = audio.cont[rid]; if (!c) return;
+  if (f == null) { c.g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); return; }
+  c.o.frequency.setTargetAtTime(f, ac.currentTime, 0.08);
+  c.g.gain.setTargetAtTime(level(rid, 0.15), ac.currentTime, 0.05);
+}
+function syncAudio(restart) {
+  for (const rid of ['old', 'new']) {
+    if (ac) {
+      if (restart) contStop(rid);  // stereo change needs a new voice chain
+      if (audio.on[rid] && audio.mode === 'cont') contStart(rid); else contStop(rid);
+    }
+    const b = document.querySelector(`button.tone[data-tone="${rid}"]`);
+    b.setAttribute('aria-pressed', audio.on[rid]); b.textContent = (audio.on[rid] ? '🔊 ' : '🔈 ') + b.textContent.slice(3);
+    if (audio.on[rid] && audio.mode === 'cont' && last) { const r = last.routers.find(x => x.id === rid); if (r && r.latest) contSet(rid, toneFreq(rid, r.latest)); }
+  }
+}
+function onSample(rid, L) {
+  if (!audio.on[rid] || !ac) return;
+  const f = toneFreq(rid, L);
+  if (audio.mode === 'beep') { if (f) beep(rid, f); } else contSet(rid, f);
+}
+function preview(rid) {
+  const r = last && last.routers.find(x => x.id === rid);
+  const f = (r && r.latest && toneFreq(rid, r.latest)) || TONES[rid].base;
+  if (audio.mode === 'beep') { beep(rid, f); setTimeout(() => beep(rid, f), 220); }
+}
+document.querySelectorAll('button.tone').forEach(b => b.onclick = () => {
+  ensureAC(); const rid = b.dataset.tone; audio.on[rid] = !audio.on[rid]; syncAudio();
+  if (audio.on[rid]) preview(rid);
+});
+$('tonemode').value = audio.mode; $('tonefollow').value = audio.follow; $('stereo').checked = audio.stereo;
+$('vol-old').value = audio.vol.old; $('vol-new').value = audio.vol.new;
+$('tonemode').onchange = e => { audio.mode = e.target.value; store.set('toneMode', audio.mode); syncAudio(); };
+$('tonefollow').onchange = e => { audio.follow = e.target.value; store.set('toneFollow', audio.follow); syncAudio(); };
+$('stereo').onchange = e => { audio.stereo = e.target.checked; store.set('toneStereo', audio.stereo ? '1' : '0'); syncAudio(true); };
+for (const rid of ['old', 'new']) {
+  $('vol-' + rid).oninput = e => { audio.vol[rid] = +e.target.value; store.set(rid === 'old' ? 'toneVolOld' : 'toneVolNew', audio.vol[rid]); syncAudio(); };
+  $('vol-' + rid).onchange = () => { if (ac && audio.on[rid]) preview(rid); };
+}
+
+/* ================= speed tests ================= */
+function selectedTest(s) {
+  if (s.speed_live) return s.speed_live;
+  return (selSpeed != null ? speeds.find(x => x.t === selSpeed) : null) || speeds[speeds.length - 1] || null;
+}
+function speedCfg(test) {
+  if (!test) return { time: false, xMax: 11, y: { min: 0, max: 5, ticks: 4, unit: 'Mbit/s' }, empty: 'Run a test to see throughput here.' };
+  const series = test.series || [], wans = test.wans || [];
+  const pings = Object.values(test.ping || {}).flat().map(p => p[1]).filter(v => v != null);
+  const ticks = Object.values(test.ping || {}).flat().filter(p => p[1] == null).map(p => p[0]);
+  return {
+    time: false, xMax: (test.T || 10) + 1, peak: Math.max(2, ...series.map(s => s[1])),
+    y: { min: 0, max: null, minMax: 2, ticks: 4, unit: 'Mbit/s', dec: 1 },
+    stack: wans.map((w, i) => ({ name: `${w} ↓`, color: wanColor(w), pts: series.map(s => [s[0], s[2 + i]]) })),
+    right: { max: niceMax(Math.max(300, ...pings) * 1.1), unit: 'ms',
+      // joined across no-reply gaps; those are marked by the red ticks along the top
+      lines: Object.entries(test.ping || {}).map(([dev, pts]) => ({ name: `ping ${dev}`, color: css('--ping'), width: 1.5, dash: [5, 4], pts, connect: true })) },
+    ticks, empty: test.phase && test.phase !== 'running' ? test.phase + '…' : (series.length ? null : 'starting…'),
+  };
+}
+function speedSummary(t) {
+  if (!t) return null;
+  const live = !!t.phase, series = t.series || [];
+  const per = {};
+  (t.wans || []).forEach((w, i) => { per[w] = t.per && t.per[w] != null ? t.per[w] : (series.length ? series.reduce((a, s) => a + s[2 + i], 0) / series.length : null); });
+  const totals = series.map(s => s[1]);
+  const avg = t.mbit != null ? t.mbit : (totals.length ? sum(totals) / totals.length : null);
+  const smooth = totals.slice(1).map((v, i) => (v + totals[i]) / 2);
+  const peak = t.peak != null ? t.peak : (smooth.length ? Math.max(...smooth) : (totals.length ? Math.max(...totals) : null));
+  const ping0 = Object.keys(t.ping || {})[0];
+  const idleArr = (t.idle || {})[ping0] || [];
+  const idle = t.ping_idle ? t.ping_idle[ping0] : (idleArr.length ? sum(idleArr) / idleArr.length : null);
+  const pts = ((t.ping || {})[ping0] || []).map(p => p[1]), ok = pts.filter(v => v != null);
+  const load = t.ping_load ? t.ping_load[ping0] : { avg: ok.length ? sum(ok) / ok.length : null,
+    max: ok.length ? Math.max(...ok) : null, loss: pts.length ? Math.round(100 * (pts.length - ok.length) / pts.length) : null };
+  const busy = Object.entries(t.bg || {}).filter(([, v]) => v >= 0.3);
+  return { live, per, avg, peak, idle, load, mb: t.mb, busy };
+}
+function renderSpeed(s) {
+  const busy = s.speed_busy;
+  document.querySelectorAll('button.sp').forEach(b => {
+    b.disabled = !!busy;
+    b.firstChild.textContent = busy === b.dataset.speed ? '⏳ Testing… ' : `▶ ${ROUTER_NAME[b.dataset.speed]}${b.dataset.speed === 'both' ? ' at once' : ''} `;
+  });
+  const test = selectedTest(s), sm = speedSummary(test);
+  if (test) {
+    const el = (test.series || []).length ? test.series[test.series.length - 1][0] : 0;
+    $('speedtitle').innerHTML = test.phase
+      ? `<span class="pill ${test.router}">${ROUTER_NAME[test.router]}</span> running “${esc(test.label)}” · ${fmt(Math.min(el, test.T), 0)} / ${test.T} s`
+      : `<span class="pill ${test.router}">${ROUTER_NAME[test.router]}</span> “${esc(test.label)}” · ${test.date || ''} ${test.time}`;
+  }
+  chart($('speedlive'), speedCfg(test));
+  $('speedlegend').innerHTML = test ? (test.wans || []).map(w => `<span><span class="sw" style="background:${wanColor(w)}"></span>${w} <b>${fmt(sm.per[w])}</b></span>`).join('') +
+    `<span><span class="sw" style="background:transparent;border:2px dashed ${css('--ping')};height:0;border-radius:0"></span>ping</span>` +
+    `<span><span class="sw" style="background:${css('--bad')};width:3px"></span>no reply</span>` : '';
+  $('t-avg').textContent = sm ? fmt(sm.avg) : '—';
+  $('t-peak').textContent = sm ? fmt(sm.peak) : '—';
+  $('t-mb').textContent = sm && sm.mb != null ? fmt(sm.mb, 0) : (sm && sm.live ? '…' : '—');
+  $('t-ping').textContent = sm && sm.idle != null ? `${fmt(sm.idle, 0)} → ${fmt(sm.load && sm.load.avg, 0)}` : '—';
+  $('t-pingx').textContent = sm && sm.load ? `max ${fmt(sm.load.max, 0)} ms · no-reply ${sm.load.loss ?? '—'}%` : '';
+  $('t-bgtile').hidden = !(sm && sm.busy.length);
+  $('t-bg').textContent = sm && sm.busy.length ? sm.busy.map(([w, v]) => `${w}: ${fmt(v)} Mbit/s`).join(' · ') : '';
+  let dTxt = '', dCls = '';
+  if (test && !test.phase && sm.avg != null) {
+    const prev = [...speeds].filter(x => x.router === test.router && x.t < test.t && x.mbit != null).pop();
+    if (prev) { const [dt, dc] = delta(sm.avg, prev.mbit); dTxt = `${dt} vs previous ${ROUTER_NAME[test.router].toLowerCase()} test (“${prev.label}”)`; dCls = dc; }
+  }
+  $('t-avgd').textContent = dTxt; $('t-avgd').className = 'd ' + dCls;
+  const today = new Date().toISOString().slice(0, 10);
+  $('speeddata').textContent = `Data used by tests today: ${fmt(sum(speeds.filter(x => x.date === today).map(x => x.mb)), 0)} MB`;
+  const key = JSON.stringify([speeds.length, selSpeed, test && test.t, $('speedhist').clientWidth]);
+  if (key !== speedKey) { speedKey = key; renderSpeedHist(test); renderSpeedTable(test); }
+}
+function renderSpeedHist(sel) {
+  const c = $('speedhist'); if (!c.clientWidth) return;
+  const { g, w, h } = prep(c);
+  const list = speeds.slice(-24), L = 44, T = 18, B = 34, W = w - L - 10, H = h - T - B;
+  g.fillStyle = css('--card'); g.fillRect(0, 0, w, h); g.font = '11px system-ui';
+  histRects = [];
+  if (!list.length) { g.fillStyle = css('--muted'); g.textAlign = 'center'; g.fillText('No tests yet.', L + W / 2, T + H / 2); return; }
+  const ymax = niceMax(Math.max(2, ...list.map(x => x.mbit || 0)) * 1.15);
+  const y = v => T + H - v / ymax * H;
+  g.textBaseline = 'middle';
+  for (const t of niceTicks(0, ymax, 4)) {
+    const Y = Math.round(y(t)) + 0.5; g.strokeStyle = css(t ? '--grid' : '--line'); g.setLineDash(t ? [3, 4] : []);
+    g.beginPath(); g.moveTo(L, Y); g.lineTo(L + W, Y); g.stroke(); g.fillStyle = css('--muted'); g.textAlign = 'right'; g.fillText(fmtTick(t), L - 7, Y);
+  }
+  g.setLineDash([]); g.textBaseline = 'alphabetic';
+  g.font = '10px system-ui'; g.textAlign = 'right'; g.fillText('Mbit/s', L - 7, T - 6);
+  const slot = W / Math.max(list.length, 8), bw = Math.min(44, slot * 0.66);
+  list.forEach((t, i) => {
+    const cx = L + slot * (i + 0.5), x0 = cx - bw / 2, v = t.mbit || 0;
+    const parts = t.router === 'both' && t.split ? [[t.split.new || 0, '--new'], [t.split.old || 0, '--old']] : [[v, '--' + t.router]];
+    let base = 0;
+    parts.forEach(([pv, col], k) => {
+      const gr = g.createLinearGradient(0, y(base + pv), 0, y(base));
+      gr.addColorStop(0, css(col)); gr.addColorStop(1, rgba(css(col), 0.65));
+      g.fillStyle = gr; rrect(g, x0, y(base + pv), bw, Math.max(1, y(base) - y(base + pv)), k === parts.length - 1 ? [5, 5, 0, 0] : 0); g.fill();
+      base += pv;
+    });
+    if (sel && t.t === sel.t) { g.strokeStyle = css('--ink'); g.lineWidth = 2; rrect(g, x0 - 2, y(v) - 2, bw + 4, y(0) - y(v) + 4, 6); g.stroke(); g.lineWidth = 1; }
+    g.fillStyle = css('--ink'); g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(v), cx, y(v) - 5);
+    g.fillStyle = css('--muted'); g.font = '11px system-ui';
+    const lab = String(t.label || '-'); g.fillText(lab.length > 10 ? lab.slice(0, 9) + '…' : lab, cx, h - B + 15);
+    g.font = '10px system-ui'; g.fillText(String(t.time || '').slice(0, 5), cx, h - B + 28);
+    histRects.push([cx - slot / 2, slot, t.t]);
+  });
+  $('histlegend').innerHTML = `<span class="pill old">old</span> <span class="pill new">new</span> <span class="pill both">both</span>`;
+}
+function renderSpeedTable(sel) {
+  const rows = [...speeds].reverse().slice(0, 25);
+  $('speedrows').innerHTML = rows.length ? rows.map(t => {
+    const p0 = Object.keys(t.ping || {})[0], ld = (t.ping_load || {})[p0] || {};
+    return `<tr data-t="${t.t}" class="${sel && t.t === sel.t ? 'sel' : ''}"><td>${t.date ? t.date.slice(5) + ' ' : ''}${t.time}</td><td>${esc(t.label)}</td>` +
+      `<td><span class="pill ${t.router}">${t.router}</span></td><td><b>${fmt(t.mbit)}</b></td><td>${fmt(t.peak)}</td>` +
+      `<td>${Object.entries(t.per || {}).map(([w, v]) => `${w} ${fmt(v)}`).join(' · ')}</td>` +
+      `<td>${fmt((t.ping_idle || {})[p0], 0)} → ${fmt(ld.avg, 0)} <span class="note">(max ${fmt(ld.max, 0)})</span></td>` +
+      `<td>${ld.loss ?? '—'}%</td><td>${fmt(t.mb, 0)}</td>` +
+      `<td>${Object.entries(t.bg || {}).filter(([, v]) => v >= 0.3).map(([w, v]) => `<span style="color:var(--poor)">⚠ ${w} ${fmt(v)}</span>`).join(' ') || (t.bg ? 'quiet' : '—')}</td></tr>`;
+  }).join('') : '<tr><td colspan="10" class="note">No speed tests yet.</td></tr>';
+}
+async function loadSpeeds() {
+  try { speeds = await (await fetch('/speeds', { cache: 'no-store' })).json(); speedKey = ''; } catch (e) { /* retry next tick */ }
+}
+$('speedhist').onclick = e => {
+  const r = $('speedhist').getBoundingClientRect(), x = e.clientX - r.left;
+  const hit = histRects.find(([x0, wd]) => x >= x0 && x <= x0 + wd);
+  if (hit) { selSpeed = hit[2]; if (last) render(last); }
+};
+$('speedrows').onclick = e => { const tr = e.target.closest('tr[data-t]'); if (tr) { selSpeed = +tr.dataset.t; if (last) render(last); } };
+document.querySelectorAll('button.sp').forEach(b => b.onclick = () => { selSpeed = null; post('/speedtest', '&router=' + b.dataset.speed); });
+
+/* ================= snapshots ================= */
+function renderSnaps(s, ref) {
+  $('refbanner').textContent = ref ? `Reference: ${ref.label} (${ref.time.slice(11, 16)})` : '';
+  $('refnote').textContent = ref ? `Comparing live values against “${ref.label}”.` : 'Pick one with “Use as reference” to see live differences against it.';
+  const key = JSON.stringify([(s.snapshots || []).map(x => x.id), refId]);
+  if (key === snapsKey) return;
+  snapsKey = key;
+  const list = [...(s.snapshots || [])].reverse();
+  $('snaps').innerHTML = list.length ? list.map(x => `<div class="snap${x.id === refId ? ' active' : ''}">
+      ${x.png ? `<a href="/snapshots/${encodeURIComponent(x.png)}" target="_blank" rel="noopener"><img src="/snapshots/${encodeURIComponent(x.png)}" alt="${esc(x.label)}" loading="lazy"></a>` : ''}
+      <div class="t">${esc(x.label)}</div>
+      <div class="v">${esc(x.time)}</div>
+      <div class="v">Old: SINR ${fmt(x.old && x.old.sinr)} · RSRP ${fmt(x.old && x.old.rsrp, 0)}<br>New: SINR ${fmt(x.new && x.new.sinr)} · RSRP ${fmt(x.new && x.new.rsrp)}</div>
+      <div class="b">${x.id === refId ? `<button class="small refb" data-clear="1">Clear reference</button>`
+        : `<button class="small refb" data-ref="${esc(x.id)}">Use as reference</button>`}
+        ${x.png ? `<a class="btnlink" href="/snapshots/${encodeURIComponent(x.png)}" download>Download</a>` : ''}</div>
+    </div>`).join('') : '<div class="note">No snapshots yet.</div>';
+}
+// Snapshot image: both router panels redrawn onto one canvas, using the same chart component.
+function composeSnapshot(s, label) {
+  const S = 2, W = 1240, pad = 16, colW = (W - pad * 3) / 2, chartH = 160, now = Date.now() / 1000;
+  const maxCh = Math.max(0, ...s.routers.map(r => ((r.latest || {}).chains || []).length));
+  const chartsY = 36 + 74 + maxCh * 20 + 8;
+  const panelH = chartsY + CHARTS.length * (22 + chartH) + 12;
+  const H = 64 + panelH + pad;
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
+  const g = c.getContext('2d'); g.scale(S, S);
+  g.fillStyle = css('--bg'); g.fillRect(0, 0, W, H);
+  g.fillStyle = css('--ink'); g.font = '600 19px system-ui'; g.fillText(`Snapshot: ${label}`, pad, 30);
+  g.fillStyle = css('--muted'); g.font = '13px system-ui';
+  g.fillText(`${new Date().toLocaleString()}  ·  values = live, small text = 10 s average`, pad, 50);
+  s.routers.forEach((r, i) => {
+    const x0 = pad + i * (colW + pad), y0 = 64, L = r.latest || {};
+    g.fillStyle = css('--card'); rrect(g, x0, y0, colW, panelH, 12); g.fill();
+    g.strokeStyle = css('--line'); g.lineWidth = 1; rrect(g, x0, y0, colW, panelH, 12); g.stroke();
+    g.fillStyle = css('--ink'); g.font = '600 15px system-ui'; g.textAlign = 'left'; g.fillText(r.name, x0 + 14, y0 + 22);
+    g.fillStyle = css('--muted'); g.font = '12px system-ui';
+    g.fillText(`Band ${L.band ?? '?'} · ${L.bw ?? ''} · PCI ${L.pci ?? '?'} · cell ${L.cell ?? '?'}` +
+      (r.id === 'new' ? ` · MIMO ${L.mimo ?? '—'} · rank ${L.dl_rank ?? '—'}` : ''), x0 + 14, y0 + 38);
+    let y = y0 + 50;
+    [['SINR', L.sinr, 'dB', 'sinr', 1], ['RSRP', L.rsrp, 'dBm', 'rsrp', 1], ['RSRQ', L.rsrq, 'dB', 'rsrq', 1]].forEach(([n, v, u, k, d], j) => {
+      const mx = x0 + 14 + j * (colW - 28) / 3, a = r.avg10 ? r.avg10[k] : null;
+      g.fillStyle = css('--' + q(v, k)[1]); g.fillRect(mx, y, 4, 56);
+      g.fillStyle = css('--muted'); g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText(n, mx + 12, y + 11);
+      g.fillStyle = css('--ink'); g.font = '650 26px system-ui'; g.fillText(fmt(v, d), mx + 12, y + 38);
+      const vw = g.measureText(fmt(v, d)).width;
+      g.fillStyle = css('--muted'); g.font = '12px system-ui'; g.fillText(u, mx + 16 + vw, y + 38);
+      g.fillText(`avg ${fmt(a, 1)} · ${q(v, k)[0]}`, mx + 12, y + 54);
+    });
+    y = y0 + 36 + 74;
+    for (const ch of (L.chains || [])) {
+      g.fillStyle = css('--ink'); g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText(ch.name, x0 + 14, y + 11);
+      const bx = x0 + 112, bw = colW - 112 - 200;
+      g.fillStyle = css('--track'); rrect(g, bx, y + 2, bw, 12, 6); g.fill();
+      g.fillStyle = css('--' + q(ch.rsrp, 'rsrp')[1]); rrect(g, bx, y + 2, bw * pct(ch.rsrp) / 100, 12, 6); g.fill();
+      g.fillStyle = css('--muted'); g.textAlign = 'right';
+      g.fillText(`${fmt(ch.rsrp, 0)} dBm` + (ch.sinr != null ? ` · SINR ${fmt(ch.sinr, 0)}` : ch.rssi != null ? ` · RSSI ${fmt(ch.rssi, 1)}` : ''), x0 + colW - 14, y + 11);
+      y += 20;
+    }
+    y = y0 + chartsY;
+    CHARTS.forEach(([t, u], k) => {
+      g.fillStyle = css('--muted'); g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(`${t} (${u})`, x0 + 14, y + 13);
+      plot(g, x0 + 6, y + 18, colW - 12, chartH, signalCfg(r, k, s, null, now));
+      y += 22 + chartH;
+    });
+  });
+  return c.toDataURL('image/png');
+}
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+async function takeSnapshot() {
+  if (!last) return;
+  const btn = $('snapbtn'); btn.disabled = true;
+  const label = $('label').value.trim() || `snapshot ${((last.snapshots || []).length) + 1}`;
+  try {
+    const png = composeSnapshot(last, label);
+    const r = await (await fetch('/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label, png }) })).json();
+    toast(r.ok ? `Saved snapshot “${label}”` : 'Snapshot failed');
+  } catch (e) { toast('Snapshot failed: ' + e.message); }
+  btn.disabled = false;
+}
+function setRef(id) { refId = id; snapsKey = ''; store.set('refSnap', id); if (last) render(last); }
+
+/* ================= main loop ================= */
+function render(s) {
+  last = s;
+  const now = Date.now() / 1000;
+  const ao = s.auto_off && s.auto_off.remaining;
+  $('autooff').textContent = ao == null ? '' : `auto-off in ${ao >= 5400 ? Math.round(ao / 3600) + ' h' : Math.max(1, Math.round(ao / 60)) + ' min'}`;
+  if (s.data_dir) $('datadir').textContent = s.data_dir;
+  if (!built) {
+    $('routers').innerHTML = s.routers.map(panel).join('');
+    for (const r of s.routers) {
+      ROUTER_NAME[r.id] = r.name;
+      const n = document.querySelector(`button.sp[data-speed="${r.id}"] .note`);
+      if (n) n.textContent = (r.wans || []).join(' + ');
+    }
+    ALL_WANS = s.routers.slice().sort((a, b) => (a.id === 'new' ? -1 : 1) - (b.id === 'new' ? -1 : 1)).flatMap(r => r.wans || []);
+    const nb = document.querySelector('button.sp[data-speed="both"] .note');
+    if (nb) nb.textContent = `all ${ALL_WANS.length} WANs`;
+    built = true;
+  }
+  const ref = refSnap(s);
+  for (const r of s.routers) renderRouter(r, s, ref, now);
+  renderBandwidth(s, now);
+  renderSnaps(s, ref);
+  if (s.speed_rev !== speedRev) { speedRev = s.speed_rev; loadSpeeds().then(() => last && renderSpeed(last)); }
+  renderSpeed(s);
+  const m = s.measuring;
+  $('spotbtn').disabled = !!m;
+  $('measuring').textContent = m ? `Measuring “${m.label}”… ${Math.ceil(m.remaining)} s — keep everything still.`
+    : 'Change one thing, wait ~6 s, then measure. Keep everything still while measuring.';
+  const key = JSON.stringify(s.spots);
+  if (key !== spotsKey) {
+    spotsKey = key;
+    const ports = a => (a.chains || []).map(v => fmt(v, 0)).join(' / ');
+    $('spots').innerHTML = s.spots.length ? [...s.spots].reverse().map(r =>
+      `<tr><td>${esc(r.label)}</td><td>${fmt(r.old.sinr)}</td><td>${fmt(r.old.rsrp, 0)}</td><td>${ports(r.old)}</td>` +
+      `<td>${r.speed_old == null ? '—' : fmt(r.speed_old) + ' Mb/s'}</td>` +
+      `<td>${fmt(r.new.sinr)}</td><td>${fmt(r.new.rsrp)}</td><td>${ports(r.new)}</td>` +
+      `<td>${r.speed_new == null ? '—' : fmt(r.speed_new) + ' Mb/s'}</td><td>${r.time}</td></tr>`).join('')
+      : '<tr><td colspan="10" class="note">No spots yet.</td></tr>';
+  }
+}
+async function tick() {
+  try { render(await (await fetch('/data', { cache: 'no-store' })).json()); }
+  catch (e) { document.querySelectorAll('.dot').forEach(d => d.className = 'dot'); }
+  setTimeout(tick, 1000);
+}
+const post = (path, extra = '') => fetch(path + '?label=' + encodeURIComponent($('label').value.trim()) + extra, { method: 'POST' });
+$('spotbtn').onclick = () => post('/spot');
+$('snapbtn').onclick = takeSnapshot;
+$('snaps').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.ref) setRef(b.dataset.ref); else if (b.dataset.clear) setRef(null);
+};
+syncAudio();
+tick();
+</script>
+</body>
+</html>

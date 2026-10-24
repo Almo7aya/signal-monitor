@@ -1,0 +1,17 @@
+{
+	"luci-app-signalmon": {
+		"description": "Grant access to the signal monitor (Services > Signal Monitor)",
+		"read": {
+			"ubus": {
+				"signalmon": [ "status" ]
+			},
+			"uci": [ "signalmon" ]
+		},
+		"write": {
+			"ubus": {
+				"signalmon": [ "start", "stop", "extend" ]
+			},
+			"uci": [ "signalmon" ]
+		}
+	}
+}
